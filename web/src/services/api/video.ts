@@ -76,7 +76,46 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     if (script) return createPluginVideoTask(requestConfig, selectedModel, script, prompt, references, options);
     assertVideoConfig(requestConfig, requestConfig.model);
     if (requestConfig.apiFormat === "gemini") return createGeminiVideoTask(requestConfig, selectedModel, prompt, references, options);
+    if (isGrokVideoModel(requestConfig.model)) return createGrokVideoTask(requestConfig, selectedModel, prompt, references, options);
     return createOpenAIVideoTask(requestConfig, selectedModel, prompt, references, options);
+}
+
+const GROK_ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"];
+
+function isGrokVideoModel(model: string) {
+    return /^grok-imagine-video(?:-|$)/i.test(modelOptionName(model));
+}
+
+// API Thật's xAI plugin takes JSON on /v1/videos: image = first frame, reference_images = style refs.
+async function createGrokVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    if (options?.videos?.length || options?.audios?.length) throw new Error(apiText("videoReferencesUnsupported"));
+    const images = await Promise.all(references.map((image) => imageToDataUrl(image)));
+    const mode = resolveVideoMode(config.videoMode, images.length);
+    const ratio = inferVideoRatio(config.size || "16:9");
+    let resolution = normalizeVideoResolution(config.vquality);
+    if (!["480p", "720p", "1080p"].includes(resolution)) resolution = "720p";
+    if (resolution === "1080p" && (/^grok-imagine-video$/i.test(modelOptionName(model)) || (mode === "reference" && images.length))) resolution = "720p";
+    const body: Record<string, unknown> = {
+        model: modelOptionName(model),
+        prompt,
+        duration: Math.max(1, Math.min(15, Number(normalizeVideoSeconds(config.videoSeconds)))),
+        resolution,
+        generate_audio: boolConfig(config.videoGenerateAudio, true),
+    };
+    if (GROK_ASPECT_RATIOS.includes(ratio)) body.aspect_ratio = ratio;
+    if (mode === "frames") {
+        if (images[0]) body.image = { url: images[0] };
+        if (images[1]) body.last_frame = { url: images[1] };
+    } else if (images.length) {
+        body.reference_images = images.slice(0, 7).map((url) => ({ url }));
+    }
+    try {
+        const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(aiApiUrl(config, "/videos"), body, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data);
+        if (!created.id) throw new Error(apiText("noVideoTaskId"));
+        return { id: created.id, provider: "openai", model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
+    }
 }
 
 export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
@@ -195,6 +234,8 @@ async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, 
         const video = unwrapVideoResponse((await axios.get<ApiVideoResponse>(aiApiUrl(config, `/videos/${task.id}`), { headers: aiHeaders(config), signal: options?.signal })).data);
         const url = videoResultUrl(video);
         if (url) return { status: "completed", result: await videoResultFromUrl(url, options) };
+        // API Thật reports a moderated (still billed) Grok video as completed with an error and no content.
+        if (video.status === "completed" && video.error?.message) return { status: "failed", error: readApiErrorMessage(video.error.message) || apiText("videoGenerationFailed") };
         if (video.status === "completed") {
             const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${task.id}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal });
             await assertVideoBlob(content.data);

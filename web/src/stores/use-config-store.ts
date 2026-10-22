@@ -76,34 +76,36 @@ export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+// API Thật "image-video" group. Customers paste their own key; no key ships in the build.
+export const APITHAT_BASE_URL = "https://apithat.dev";
+const APITHAT_IMAGE_MODELS = ["gpt-image-2.5-flare", "gpt-image-2.5-flare-4k", "gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst-4k", "gpt-image-2", "gpt-image-2-4k", "grok-imagine-image-2.0", "nano-banana-2"];
+const APITHAT_VIDEO_MODELS = ["grok-imagine-video-1.5", "grok-imagine-video"];
 export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
 export const DEFAULT_LOCAL_PROXY_URL = "http://127.0.0.1:23210";
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
-    baseUrl: OPENAI_BASE_URL,
+    baseUrl: APITHAT_BASE_URL,
     apiKey: "",
     apiFormat: "openai",
     channels: [
         {
             id: "default",
-            name: i18n.t("config.channels.defaultName"),
-            baseUrl: OPENAI_BASE_URL,
+            name: "API Thật",
+            baseUrl: APITHAT_BASE_URL,
             apiKey: "",
             apiFormat: "openai",
             models: [
-                { name: "gpt-image-2", capability: "image" },
-                { name: "grok-imagine-video", capability: "video" },
-                { name: "gpt-5.5", capability: "text" },
-                { name: "gpt-4o-mini-tts", capability: "audio" },
+                ...APITHAT_IMAGE_MODELS.map((name) => ({ name, capability: "image" as const })),
+                ...APITHAT_VIDEO_MODELS.map((name) => ({ name, capability: "video" as const })),
             ],
         },
     ],
-    model: "default::gpt-image-2",
-    imageModel: "default::gpt-image-2",
-    videoModel: "default::grok-imagine-video",
-    textModel: "default::gpt-5.5",
-    audioModel: "default::gpt-4o-mini-tts",
+    model: "default::gpt-image-2.5-flare",
+    imageModel: "default::gpt-image-2.5-flare",
+    videoModel: "default::grok-imagine-video-1.5",
+    textModel: "",
+    audioModel: "",
     audioVoice: "alloy",
     audioFormat: "mp3",
     audioSpeed: "1",
@@ -253,7 +255,7 @@ export const useConfigStore = create<ConfigStore>()(
                 const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
                 const persistedWebdav = (persistedState.webdav || {}) as Partial<WebdavSyncConfig>;
                 const config = { ...defaultConfig, ...persistedConfig };
-                if (!Array.isArray(persistedConfig.channels)) config.channels = [];
+                if (!Array.isArray(persistedConfig.channels)) config.channels = persistedState.config ? [] : defaultConfig.channels;
                 const channels = normalizeChannels(config);
                 const models = modelOptionsFromChannels(channels);
                 return {

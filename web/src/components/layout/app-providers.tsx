@@ -4,8 +4,10 @@ import { ProConfigProvider } from "@ant-design/pro-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App, ConfigProvider } from "antd";
 import enUS from "antd/es/locale/en_US";
+import viVN from "antd/es/locale/vi_VN";
 import zhCN from "antd/es/locale/zh_CN";
 import dayjs from "dayjs";
+import "dayjs/locale/vi";
 import "dayjs/locale/zh-cn";
 import { useTranslation } from "react-i18next";
 
@@ -39,11 +41,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
         document.documentElement.lang = locale;
         document.title = t("meta.title");
         document.querySelector('meta[name="description"]')?.setAttribute("content", t("meta.description"));
-        dayjs.locale(locale === "zh-CN" ? "zh-cn" : "en");
+        dayjs.locale(locale === "zh-CN" ? "zh-cn" : locale === "vi-VN" ? "vi" : "en");
     }, [locale, t]);
 
     return (
-        <ConfigProvider locale={locale === "zh-CN" ? zhCN : enUS} theme={getAntThemeConfig(dark)}>
+        <ConfigProvider locale={locale === "zh-CN" ? zhCN : locale === "vi-VN" ? viVN : enUS} theme={getAntThemeConfig(dark)}>
             <ProConfigProvider dark={dark}>
                 <App>
                     <QueryClientProvider client={queryClient}>
