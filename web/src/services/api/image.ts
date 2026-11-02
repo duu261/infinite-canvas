@@ -314,6 +314,13 @@ function aiApiUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path);
 }
 
+// API Thật images use the no-Cloudflare relay so long renders are not cut at ~125s (524).
+// Rewritten per request so channels saved with the old base URL also switch.
+function imageApiUrl(config: AiConfig, path: string) {
+    const baseUrl = config.baseUrl.trim().replace(/\/+$/, "").replace(/^https:\/\/apithat\.dev(?=\/v1$|$)/i, "https://api.apithat.dev");
+    return buildApiUrl(baseUrl, path);
+}
+
 function aiHeaders(config: AiConfig, contentType?: string) {
     return {
         Authorization: `Bearer ${config.apiKey}`,
@@ -726,7 +733,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     const background = normalizeBackground(config.background);
     try {
         const response = await axios.post<ImageApiResponse>(
-            aiApiUrl(requestConfig, "/images/generations"),
+            imageApiUrl(requestConfig, "/images/generations"),
             {
                 model: requestConfig.model,
                 prompt: withSystemPrompt(requestConfig, prompt),
@@ -810,7 +817,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     files.forEach((file) => formData.append(imageField, file));
 
     try {
-        const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), formData, { headers: aiHeaders(requestConfig), signal: options?.signal, timeout: IMAGE_REQUEST_TIMEOUT_MS });
+        const response = await axios.post<ImageApiResponse>(imageApiUrl(requestConfig, "/images/edits"), formData, { headers: aiHeaders(requestConfig), signal: options?.signal, timeout: IMAGE_REQUEST_TIMEOUT_MS });
         const images = await parseImagePayload(response.data);
         return images;
     } catch (error) {
